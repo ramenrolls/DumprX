@@ -1036,6 +1036,11 @@ if [[ "$treble_support" = true ]]; then
         # Remove all .git directories from aospdtout
         rm -rf $(find $aospdtout -type d -name ".git")
 
+  # User Interaction for File Reorganization
+        printf "\n** Time to reorganize files before generating all_files.txt!**\n"
+        printf "Press any key to continue when you're finished...\n"
+        read -r -n 1 -p "" -s
+	
         # Regenerate all_files.txt
         find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_files.txt
 fi
