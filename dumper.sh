@@ -93,11 +93,6 @@ for tool_slug in "${EXTERNAL_TOOLS[@]}"; do
 	fi
 done
 
-# Activate virtual environment
-[[ "${USE_VENV}" == "false" || "${USE_VENV}" == "0" ]] || {
-	[ -e ".venv" ] && source .venv/bin/activate
-}
-
 ## See README.md File For Program Credits
 # Set Utility Program Alias
 SDAT2IMG="${UTILSDIR}"/sdat2img.py
@@ -105,7 +100,6 @@ SIMG2IMG="${UTILSDIR}"/bin/simg2img
 PACKSPARSEIMG="${UTILSDIR}"/bin/packsparseimg
 UNSIN="${UTILSDIR}"/unsin
 PAYLOAD_EXTRACTOR="${UTILSDIR}"/bin/payload-dumper-go
-DTB_EXTRACTOR="${UTILSDIR}"/extract-dtb.py
 DTC="${UTILSDIR}"/dtc
 VMLINUX2ELF="${UTILSDIR}"/vmlinux-to-elf/vmlinux-to-elf
 KALLSYMS_FINDER="${UTILSDIR}"/vmlinux-to-elf/kallsyms-finder
@@ -131,6 +125,10 @@ if ! command -v 7zz > /dev/null 2>&1; then
 	BIN_7ZZ="${UTILSDIR}"/bin/7zz
 else
 	BIN_7ZZ=7zz
+fi
+
+if ! command -v uvx > /dev/null 2>&1; then
+	export PATH="${HOME}/.local/bin:${PATH}"
 fi
 
 # Set Names of Downloader Utility Programs
@@ -266,7 +264,7 @@ if [[ $(head -c12 "${FILEPATH}" 2>/dev/null | tr -d '\0') == "OPPOENCRYPT!" ]] |
 	# Either Move Downloaded/Re-Loaded File Or Copy Local File
 	mv -f "${INPUTDIR}"/"${FILE}" "${TMPDIR}"/"${FILE}" 2>/dev/null || cp -a "${FILEPATH}" "${TMPDIR}"/"${FILE}"
 	printf "Decrypting ozip And Making A Zip...\n"
-	python3 "${OZIPDECRYPT}" "${TMPDIR}"/"${FILE}"
+	uv run --with-requirements "${UTILSDIR}/oppo_decrypt/requirements.txt" "${OZIPDECRYPT}" "${TMPDIR}"/"${FILE}"
 	mkdir -p "${INPUTDIR}" 2>/dev/null && rm -rf -- "${INPUTDIR:?}"/* 2>/dev/null
 	if [[ -f "${FILE%.*}".zip ]]; then
 		mv "${FILE%.*}".zip "${INPUTDIR}"/
@@ -297,7 +295,7 @@ if [[ "${EXTENSION}" == "ops" ]]; then
 	# Either Move Downloaded/Re-Loaded File Or Copy Local File
 	mv -f "${INPUTDIR}"/"${FILE}" "${TMPDIR}"/"${FILE}" 2>/dev/null || cp -a "${FILEPATH}" "${TMPDIR}"/"${FILE}"
 	printf "Decrypting ops & extracing...\n"
-	python3 "${OPSDECRYPT}" decrypt "${TMPDIR}"/"${FILE}"
+	uv run --with-requirements "${UTILSDIR}/oppo_decrypt/requirements.txt" "${OPSDECRYPT}" decrypt "${TMPDIR}"/"${FILE}"
 	mkdir -p "${INPUTDIR}" 2>/dev/null && rm -rf -- "${INPUTDIR:?}"/* 2>/dev/null
 	mv "${TMPDIR}"/extract/* "${INPUTDIR}"/
 	rm -rf "${TMPDIR:?}"/*
@@ -324,9 +322,9 @@ if [[ "${EXTENSION}" == "ofp" ]]; then
 	# Either Move Downloaded/Re-Loaded File Or Copy Local File
 	mv -f "${INPUTDIR}"/"${FILE}" "${TMPDIR}"/"${FILE}" 2>/dev/null || cp -a "${FILEPATH}" "${TMPDIR}"/"${FILE}"
 	printf "Decrypting ofp & extracing...\n"
-	python3 "$OFP_QC_DECRYPT" "${TMPDIR}"/"${FILE}" out
+	uv run --with-requirements "${UTILSDIR}/oppo_decrypt/requirements.txt" "$OFP_QC_DECRYPT" "${TMPDIR}"/"${FILE}" out
 	if [[ ! -f "${TMPDIR}"/out/boot.img || ! -f "${TMPDIR}"/out/userdata.img ]]; then
-		python3 "$OFP_MTK_DECRYPT" "${TMPDIR}"/"${FILE}" out
+		uv run --with-requirements "${UTILSDIR}/oppo_decrypt/requirements.txt" "$OFP_MTK_DECRYPT" "${TMPDIR}"/"${FILE}" out
 		if [[ ! -f "${TMPDIR}"/out/boot.img || ! -f "${TMPDIR}"/out/userdata.img ]]; then
 			printf "ofp decryption error.\n" && exit 1
 		fi
@@ -756,7 +754,7 @@ rm -rf "${TMPDIR:?}"/*
 if [[ -f "${OUTDIR}"/boot.img ]]; then
 	# Extract dts
 	mkdir -p "${OUTDIR}"/bootimg "${OUTDIR}"/bootdts 2>/dev/null
-	python3 "${DTB_EXTRACTOR}" "${OUTDIR}"/boot.img -o "${OUTDIR}"/bootimg >/dev/null
+	uvx -q extract-dtb "${OUTDIR}"/boot.img -o "${OUTDIR}"/bootimg >/dev/null
 	find "${OUTDIR}"/bootimg -name '*.dtb' -type f | gawk -F'/' '{print $NF}' | while read -r i; do "${DTC}" -q -s -f -I dtb -O dts -o bootdts/"${i/\.dtb/.dts}" bootimg/"${i}"; done 2>/dev/null
 	bash "${UNPACKBOOT}" "${OUTDIR}"/boot.img "${OUTDIR}"/boot 2>/dev/null
 	printf "Boot extracted\n"
@@ -776,7 +774,7 @@ if [[ -f "${OUTDIR}"/boot.img ]]; then
 	printf "boot.elf generated\n"
 	[[ -f "${OUTDIR}"/boot/dtb.img ]] && {
 		mkdir -p "${OUTDIR}"/dtbimg 2>/dev/null
-		python3 "${DTB_EXTRACTOR}" "${OUTDIR}"/boot/dtb.img -o "${OUTDIR}"/dtbimg >/dev/null
+		uvx -q extract-dtb "${OUTDIR}"/boot/dtb.img -o "${OUTDIR}"/dtbimg >/dev/null
 	}
 fi
 
@@ -784,7 +782,7 @@ fi
 if [[ -f "${OUTDIR}"/vendor_boot.img ]]; then
 	# Extract dts
 	mkdir -p "${OUTDIR}"/vendor_bootimg "${OUTDIR}"/vendor_bootdts 2>/dev/null
-	python3 "${DTB_EXTRACTOR}" "${OUTDIR}"/vendor_boot.img -o "${OUTDIR}"/vendor_bootimg >/dev/null
+	uvx -q extract-dtb "${OUTDIR}"/vendor_boot.img -o "${OUTDIR}"/vendor_bootimg >/dev/null
 	find "${OUTDIR}"/vendor_bootimg -name '*.dtb' -type f | gawk -F'/' '{print $NF}' | while read -r i; do "${DTC}" -q -s -f -I dtb -O dts -o vendor_bootdts/"${i/\.dtb/.dts}" vendor_bootimg/"${i}"; done 2>/dev/null
 	bash "${UNPACKBOOT}" "${OUTDIR}"/vendor_boot.img "${OUTDIR}"/vendor_boot 2>/dev/null
 	printf "Vendor Boot extracted\n"
@@ -795,7 +793,7 @@ if [[ -f "${OUTDIR}"/vendor_boot.img ]]; then
 	printf "vendor_boot.elf generated\n"
 	[[ -f "${OUTDIR}"/vendor_boot/dtb.img ]] && {
 		mkdir -p "${OUTDIR}"/vendor_dtbimg 2>/dev/null
-		python3 "${DTB_EXTRACTOR}" "${OUTDIR}"/vendor_boot/dtb.img -o "${OUTDIR}"/vendor_dtbimg >/dev/null
+		uvx -q extract-dtb "${OUTDIR}"/vendor_boot/dtb.img -o "${OUTDIR}"/vendor_dtbimg >/dev/null
 	}
 fi
 
@@ -808,7 +806,7 @@ fi
 # Extract dtbo
 if [[ -f "${OUTDIR}"/dtbo.img ]]; then
 	mkdir -p "${OUTDIR}"/dtbo "${OUTDIR}"/dtbodts 2>/dev/null
-	python3 "${DTB_EXTRACTOR}" "${OUTDIR}"/dtbo.img -o "${OUTDIR}"/dtbo >/dev/null
+	uvx -q extract-dtb "${OUTDIR}"/dtbo.img -o "${OUTDIR}"/dtbo >/dev/null
 	find "${OUTDIR}"/dtbo -name '*.dtb' -type f | gawk -F'/' '{print $NF}' | while read -r i; do "${DTC}" -q -s -f -I dtb -O dts -o dtbodts/"${i/\.dtb/.dts}" dtbo/"${i}"; done 2>/dev/null
 	printf "dtbo extracted\n"
 fi
@@ -1013,7 +1011,7 @@ else
 fi
 if [[ -f ${twrpimg} ]]; then
 	mkdir -p $twrpdtout
-	python3 -m twrpdtgen $twrpimg -o $twrpdtout
+	uvx --from git+https://github.com/twrpdtgen/twrpdtgen@master twrpdtgen $twrpimg -o $twrpdtout
 	if [[ "$?" = 0 ]]; then
 		[[ ! -e "${OUTDIR}"/twrp-device-tree/README.md ]] && curl https://raw.githubusercontent.com/wiki/SebaUbuntu/TWRP-device-tree-generator/4.-Build-TWRP-from-source.md > ${twrpdtout}/README.md
 	fi
@@ -1031,7 +1029,7 @@ find "$OUTDIR" -type f -printf '%P\n' | sort | grep -v ".git/" > "$OUTDIR"/all_f
 if [[ "$treble_support" = true ]]; then
         aospdtout="lineage-device-tree"
         mkdir -p $aospdtout
-        python3 -m aospdtgen $OUTDIR -o $aospdtout
+        uvx aospdtgen $OUTDIR -o $aospdtout
 
         # Remove all .git directories from aospdtout
         rm -rf $(find $aospdtout -type d -name ".git")
